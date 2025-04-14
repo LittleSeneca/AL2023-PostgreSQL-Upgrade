@@ -1,0 +1,143 @@
+---
+- name: Check if backup directory already exists
+  ansible.builtin.stat:
+    path: "{{ backup_dir | default('/mnt/backup') }}"
+  register: backup_dir_stat
+
+- name: Display backup directory status
+  ansible.builtin.debug:
+    msg: "Backup directory exists: {{ backup_dir_stat.stat.exists }}"
+
+- block:
+  - name: Get Instance ID
+    ansible.builtin.shell:
+      cmd: "ec2-metadata -i | awk '{print $2}'"
+    register: instance_id
+    changed_when: false
+    when: true
+
+  - name: Get Region
+    ansible.builtin.shell:
+      cmd: "ec2-metadata -z | cut -d ' ' -f 2 | sed 's/[a-z]$//'"
+    register: region
+    changed_when: false
+    when: true
+
+  - name: Create Ephemeral EBS Volume
+    amazon.aws.ec2_vol:
+      instance: "{{ instance_id.stdout }}"
+      volume_size: 350
+      device_name: sdd
+      volume_type: io2
+      iops: 40000
+      region: "{{ region.stdout }}"
+      state: present
+      tags:
+        Name: backup-migration
+    register: vol_result
+
+  - name: Display Volume Details
+    ansible.builtin.debug:
+      var: vol_result
+
+  - name: Find unmounted NVMe devices
+    ansible.builtin.shell:
+      cmd: |
+        lsblk -ln -o NAME,MOUNTPOINT | awk '
+        match($1, /^nvme[0-9]+n[0-9]+/) {
+            base_dev = substr($1, RSTART, RLENGTH)
+            if (base_dev != "") {
+                seen[base_dev] = 1
+                if ($2 != "") {
+                    mounted[base_dev] = 1
+                }
+            }
+        }
+        END {
+            for (dev in seen) {
+                if (!(dev in mounted)) {
+                    print dev
+                }
+            }
+        }'
+    register: unmounted_nvmes
+    changed_when: false
+
+  - name: Display available unmounted NVMe devices
+    ansible.builtin.debug:
+      var: unmounted_nvmes.stdout_lines
+
+  - name: Set device path
+    ansible.builtin.set_fact:
+      nvme_device: "/dev/{{ unmounted_nvmes.stdout_lines[0] }}"
+    failed_when: unmounted_nvmes.stdout_lines | length == 0
+
+  - name: Display selected nvme device
+    ansible.builtin.debug:
+      msg: "Using NVMe device: {{ nvme_device }}"
+
+  - name: Create partition on the new EBS volume
+    community.general.parted:
+      device: "{{ nvme_device }}"
+      number: 1
+      label: gpt
+      state: present
+      part_start: 0%
+      part_end: 100%
+    register: parted_result
+
+  - name: Set partition device
+    ansible.builtin.set_fact:
+      nvme_partition: "{{ nvme_device }}p1"
+
+  - name: Create filesystem on the new partition
+    community.general.filesystem:
+      fstype: xfs
+      dev: "{{ nvme_partition }}"
+      opts: -L backup
+
+  - name: Create mount point directory
+    ansible.builtin.file:
+      path: "{{ backup_dir | default('/mnt/backup') }}"
+      state: directory
+      mode: '0755'
+
+  - name: Mount the new filesystem
+    ansible.builtin.mount:
+      path: "{{ backup_dir | default('/mnt/backup') }}"
+      src: "{{ nvme_partition }}"
+      fstype: xfs
+      state: mounted
+      opts: defaults,nofail
+  when: not backup_dir_stat.stat.exists
+
+- name: Create DB Backup Directory
+  ansible.builtin.file:
+    path: "{{ backup_dir }}/db_backup"
+    state: directory
+    mode: '0755'
+    owner: postgres
+    group: postgres
+
+# We cant use ansible.builtin.copy because the time to copy the data is too long and it will timeout
+# We cant use synchronize because it only supports local to remote copy
+- name: Copy Data Directory to Backup Volume
+  ansible.builtin.command:
+    cmd: cp -r {{ production_dir }} {{ backup_dir }}/db_backup/pg15_data
+  register: copy_result
+  ignore_errors: true
+  poll: 30
+  async: 9600
+
+- name: Set permissions on the backup directory
+  ansible.builtin.file:
+    path: "{{ backup_dir }}/db_backup/pg15_data"
+    mode: u=rwX,g=rX,o=rX
+    recurse: yes
+    owner: postgres
+    group: postgres
+
+- name: Check copy status
+  ansible.builtin.debug:
+    var: copy_result
+  when: copy_result is failed

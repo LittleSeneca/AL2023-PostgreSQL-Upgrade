@@ -1,0 +1,52 @@
+---
+- name: Delete postgresql data directory
+  ansible.builtin.file:
+    path: "{{ production_dir }}"
+    state: absent
+
+# We cant use ansible.builtin.copy because the time to copy the data is too long and it will timeout
+# We cant use synchronize because it only supports local to remote copy
+- name: Move postgresql data directory
+  ansible.builtin.command:
+    cmd: cp -r {{ backup_dir }}/db_backup/pg17_data {{ production_dir }}
+  poll: 30
+  async: 9600
+
+- name: Set permissions on the production directory
+  ansible.builtin.file:
+    path: "{{ production_dir }}"
+    owner: postgres
+    group: postgres
+    mode: u=rwX,g=rX,o=rX
+    recurse: yes
+
+- name: Change ownership of postgresql data directory
+  ansible.builtin.file:
+    path: "{{ production_dir }}"
+    owner: postgres
+    group: postgres
+    mode: '0700'
+    recurse: true
+
+- name: Start PostgreSQL
+  ansible.builtin.service:
+    name: postgresql
+    state: started
+    enabled: true
+  become: true
+  register: pg_start
+  ignore_errors: true
+
+- name: Check PostgreSQL status if start failed
+  ansible.builtin.shell: |
+    systemctl status postgresql
+    journalctl -xeu postgresql.service
+  register: pg_status
+  when: pg_start is failed
+  become: true
+  ignore_errors: true
+  
+- name: Display PostgreSQL status
+  ansible.builtin.debug:
+    var: pg_status.stdout_lines
+  when: pg_status is defined

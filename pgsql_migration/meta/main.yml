@@ -1,0 +1,26 @@
+---
+galaxy_info:
+  role_name: rhel_postgresql_upgrade
+  namespace: custom
+  author: Your Name
+  description: Upgrade PostgreSQL from 15 to 17 on Amazon Linux 2023
+  company: Your Company
+
+  license: MIT
+
+  min_ansible_version: "2.9"
+
+  platforms:
+  - name: Amazon
+    versions:
+    - "all"
+
+  galaxy_tags:
+    - postgresql
+    - database
+    - upgrade
+    - aws
+    - amazon
+    - migration
+
+dependencies: [] 

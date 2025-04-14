@@ -1,0 +1,83 @@
+--- 
+- name: Check if Docker is installed
+  ansible.builtin.command:
+    cmd: docker --version
+  register: docker_version
+  changed_when: false
+  ignore_errors: true
+
+- block:
+  - name: Install Pip
+    ansible.builtin.package:
+      name: python3-pip
+      state: present
+
+  - name: Create requirements file
+    ansible.builtin.copy:
+      content: |
+        boto3>=1.26.0
+        botocore>=1.29.0
+      dest: /tmp/requirements.txt
+      mode: 0644
+
+  - name: Install Python requirements
+    ansible.builtin.pip:
+      requirements: /tmp/requirements.txt
+      state: present
+
+  - name: Install Docker
+    ansible.builtin.package:
+      name: docker
+      state: present
+
+  - name: Start Docker service
+    ansible.builtin.service:
+      name: docker
+      state: started
+      enabled: true
+
+  - name: Create Docker CLI plugins directory
+    ansible.builtin.file:
+      path: /usr/local/lib/docker/cli-plugins
+      state: directory
+      mode: '0755'
+
+  - name: Download Docker Compose plugin
+    ansible.builtin.get_url:
+      url: "https://github.com/docker/compose/releases/latest/download/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
+      dest: /usr/local/lib/docker/cli-plugins/docker-compose
+      mode: '0755'
+
+  - name: Create symbolic link for Docker Compose plugin
+    ansible.builtin.file:
+      src: /usr/local/lib/docker/cli-plugins/docker-compose
+      dest: /usr/bin/docker-compose
+      state: link
+
+  - name: Verify Docker Compose plugin installation
+    ansible.builtin.command:
+      cmd: docker compose version
+    register: compose_version
+    changed_when: false
+
+  - name: Display Docker Compose version
+    ansible.builtin.debug:
+      var: compose_version.stdout
+
+  - name: Remove existing postgresql15 packages
+    ansible.builtin.package:
+      name:
+        - postgresql15-server
+        - postgresql15-contrib
+        - postgresql15
+      state: absent
+
+  - name: Install postgresql17-server
+    ansible.builtin.package:
+      name:
+        - postgresql17-server
+        - postgresql17-contrib
+        - postgresql17
+        - uuid
+      state: present
+  when: docker_version is failed or docker_version.rc != 0

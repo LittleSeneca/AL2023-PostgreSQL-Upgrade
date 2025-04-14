@@ -1,0 +1,43 @@
+---
+- name: Check if postgresql17 is installed
+  ansible.builtin.shell:
+    cmd: "rpm -q postgresql17-server"
+  register: postgresql17_installed
+  failed_when: false
+  changed_when: false
+
+- name: Set postgresql17 installation status
+  ansible.builtin.set_fact:
+    postgresql17_is_installed: "{{ postgresql17_installed.rc == 0 }}"
+
+- block:
+  - name: Check Amazon Linux version
+    ansible.builtin.shell:
+      cmd: "awk '{print $4}' /etc/system-release"
+    register: amazon_linux_version
+
+  - name: Show Amazon Linux version
+    ansible.builtin.debug:
+      var: amazon_linux_version.stdout
+
+  - name: Upgrade Amazon Linux if PostgreSQL 17 not installed
+    ansible.builtin.shell:
+      cmd: "sudo dnf upgrade --releasever={{ amazon_linux_version }} -y"
+    when: 
+      - amazon_linux_version.stdout is version('{{ amazon_linux_version }}', '<')
+
+  - name: Check Amazon Linux version after upgrade
+    ansible.builtin.shell:
+      cmd: "awk '{print $4}' /etc/system-release"
+    register: amazon_linux_version_after
+
+  - name: Show Amazon Linux version after upgrade
+    ansible.builtin.debug:
+      var: amazon_linux_version_after.stdout
+
+  - name: Reboot if upgrade is successful
+    ansible.builtin.reboot:
+    when:
+      - amazon_linux_version_after is defined
+      - amazon_linux_version_after.stdout is version('{{ amazon_linux_version }}', '>=')
+  when: not postgresql17_is_installed

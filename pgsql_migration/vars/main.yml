@@ -1,0 +1,5 @@
+postgresql_dir: "/var/lib/pgsql"
+conversion_dir: "{{ backup_dir }}/{{ database_name }}"
+production_dir: "{{ postgresql_dir }}/data"
+backup_dir: "/mnt/backup"
+amazon_linux_version: "2023.7.20250331"

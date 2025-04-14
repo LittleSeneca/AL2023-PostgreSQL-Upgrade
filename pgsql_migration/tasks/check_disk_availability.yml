@@ -1,0 +1,15 @@
+---
+- name: Check disk space
+  ansible.builtin.shell: |
+    df -h /var/lib/pgsql | awk 'NR==2 {print $5}' | sed 's/%//'
+  register: df_result
+  changed_when: false
+
+- name: Show used disk space
+  ansible.builtin.debug:
+    msg: "Used disk space: {{ df_result.stdout | int }}%"
+
+- name: Fail if not enough disk space
+  ansible.builtin.fail:
+    msg: "Not enough disk space. Need at least 50% free space, but only {{ 100 - df_result.stdout | int }}% is free."
+  when: df_result.stdout | int > 50

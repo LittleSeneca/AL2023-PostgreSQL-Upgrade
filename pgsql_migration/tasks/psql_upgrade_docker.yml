@@ -1,0 +1,90 @@
+- name: Make Scripts Folder
+  ansible.builtin.file:
+    path: "{{ backup_dir }}/db_backup/scripts"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Deploy Files
+  ansible.builtin.copy:
+    src: "files/{{ item }}"
+    dest: "{{ backup_dir }}/db_backup/{{ item }}"
+    mode: '0644'
+    owner: root
+    group: root
+  with_items:
+    - "compose.yml"
+    - "scripts/pgsql_15_to_16.sh"
+    - "scripts/pgsql_16_to_17.sh"
+    - "scripts/pgsql_17_query.sh"
+    - "scripts/entrypoint.sh"
+    - "Dockerfile"
+
+- name: Create pg16 and pg17 data directories
+  ansible.builtin.file:
+    path: "{{ backup_dir }}/db_backup/{{ item }}"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+  with_items:
+    - "pg16_data"
+    - "pg17_data"
+
+- name: Set data directory permissions
+  ansible.builtin.file:
+    path: "{{ backup_dir }}/db_backup/{{ item }}"
+    owner: postgres
+    group: postgres
+    mode: '0700'
+    recurse: true
+  with_items:
+    - "pg15_data"
+    - "pg16_data"
+    - "pg17_data"
+
+- name: Build Docker Image
+  ansible.builtin.shell:
+    cmd: docker compose build
+    chdir: "{{ backup_dir }}/db_backup"
+  register: compose_build_result
+  async: 1600
+  poll: 30
+
+- name: Display Docker Compose Build Status
+  ansible.builtin.debug:
+    var: compose_build_result
+
+- name: Run Docker Container
+  ansible.builtin.shell:
+    cmd: docker compose up
+    chdir: "{{ backup_dir }}/db_backup"
+  register: compose_up_result
+  async: 9600
+  poll: 30
+
+- name: Display Docker Compose Up Status
+  ansible.builtin.debug:
+    var: compose_up_result
+
+- name: Stop and Remove Docker Containers
+  ansible.builtin.shell:
+    cmd: docker compose down
+    chdir: "{{ backup_dir }}/db_backup"
+  async: 9600
+  poll: 30
+
+- name: Display Docker Compose Down Status
+  ansible.builtin.debug:
+    var: compose_down_result
+
+- name: Remove pgdata directories
+  ansible.builtin.file:
+    path: "{{ backup_dir }}/db_backup/{{ item }}"
+    state: absent
+  with_items:
+    - "pg15_data"
+    - "pg16_data"
+
+

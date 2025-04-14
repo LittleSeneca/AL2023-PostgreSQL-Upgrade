@@ -1,0 +1,24 @@
+- name: Set Database Name
+  ansible.builtin.set_fact:
+    database_name: "{{ inventory_hostname.split('.')[0] }}"
+
+- name: Check disk space
+  ansible.builtin.include_tasks: check_disk_availability.yml
+
+- name: Upgrade Amazon Linux
+  ansible.builtin.include_tasks: upgrade_amazon_linux.yml
+
+- name: Install Dependencies
+  ansible.builtin.include_tasks: psql_upgrade_dependencies.yml
+
+- name: Create DB Backup
+  ansible.builtin.include_tasks: create_db_backup.yml
+
+- name: Prepare PostgreSQL Upgrade
+  ansible.builtin.include_tasks: psql_upgrade_docker.yml
+
+- name: Migrate PostgreSQL
+  ansible.builtin.include_tasks: restart_postgresql.yml
+
+- name: Cleanup Migration
+  ansible.builtin.include_tasks: cleanup_migration.yml

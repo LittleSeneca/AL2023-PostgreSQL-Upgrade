@@ -1,0 +1,14 @@
+services:
+  pgsql-migration:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: root
+    environment:
+      - HOST_UID=${HOST_UID:-1000}
+      - HOST_GID=${HOST_GID:-1000}
+    volumes:
+      - ./pg15_data:/var/lib/pgsql/15/data
+      - ./pg16_data:/var/lib/pgsql/16/data
+      - ./pg17_data:/var/lib/pgsql/17/data
+    command: keep-running
