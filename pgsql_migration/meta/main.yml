@@ -2,9 +2,9 @@
 galaxy_info:
   role_name: rhel_postgresql_upgrade
   namespace: custom
-  author: Your Name
+  author: Graham Brooks
   description: Upgrade PostgreSQL from 15 to 17 on Amazon Linux 2023
-  company: Your Company
+  company: Brooks-Security.com
 
   license: MIT
 
