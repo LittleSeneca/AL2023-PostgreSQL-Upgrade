@@ -13,6 +13,8 @@ PostgreSQL 17 was only recently added to Amazon Linux 2023 repositories, creatin
 3. Installing the new PostgreSQL 17 packages
 4. Performing the upgrade using pg_upgrade with proper safeguards
 
+The approach used is completely non-destructive and reversible, leveraging ephemeral EBS volumes and Docker Compose to create a safe migration path that can be rolled back if issues occur.
+
 ## Overview
 
 This role automates the PostgreSQL database upgrade process by:
@@ -20,7 +22,7 @@ This role automates the PostgreSQL database upgrade process by:
 2. Backing up the existing PostgreSQL data
 3. Upgrading Amazon Linux 2023 if needed
 4. Installing PostgreSQL 17 and dependencies
-5. Performing the database upgrade
+5. Performing the database upgrade using Docker Compose
 6. Cleaning up temporary resources after successful migration
 
 ## Prerequisites
